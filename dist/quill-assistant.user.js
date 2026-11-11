@@ -67,7 +67,7 @@
   } catch (e) {}
 
   // 2. Extract lesson ID
-  const match = window.location.href.match(/\/lesson\/([a-zA-Z0-9\-]+)/i);
+  const match = window.location.href.match(/\/lesson\/([a-zA-Z0-9_-]+)/i);
   const lessonId = match ? match[1] : null;
   if (!lessonId) {
     alert('Quill Assistant: Please open an active lesson (/connect/#/play/lesson/...).');
