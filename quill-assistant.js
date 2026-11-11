@@ -1,16 +1,15 @@
 /**
- * Quill Master Assistant (Minimalist Anti-Freeze Edition)
+ * Quill Master Assistant (Minimalist Anti-Freeze & Input-Isolated Edition)
  * 
- * Performance & Stability Fixes:
- * 1. ELIMINATED MICROTASK LOOP: Replaced the uncontrolled document.body MutationObserver
- *    with a guarded, throttled interval (800ms) that only touches the DOM when the active
- *    question index genuinely changes. Completely eliminates the browser freeze!
- * 2. SCOPED DRAG LISTENERS: Window mousemove/mouseup listeners are now attached ONLY during
- *    active drag and removed immediately on mouseup. Never overrides window.onmousemove.
- * 3. TARGETED CLIPBOARD UNBLOCK: Restricts Event.prototype.preventDefault bypass strictly
- *    to 'paste' and 'drop' events, avoiding interference with native text selection.
- * 4. LIGHTWEIGHT PROMPT SCAN: Scans the lesson container rather than flushing synchronous
- *    layout on the entire document.body on every cycle.
+ * Key Fixes:
+ * 1. INPUT ISOLATION: autoFillQuill strictly ignores `#quill-assistant-hud`.
+ *    Previously, it matched the HUD's `#qa-filter` search box, filling it with the
+ *    answer and causing all other questions to be filtered out (disappear)!
+ * 2. REACT FIBER DIRECT INJECTION: Interrogates `__reactProps$` to call React's
+ *    internal `onChange` / `onInput` handlers directly, enabling Quill's Submit button.
+ * 3. FOCUS TRACKING: Tracks `lastFocusedInput` via window capture phase so the
+ *    active Quill answer box is remembered even when focus moves to the HUD button.
+ * 4. IFRAME SUPPORT: Can locate answer inputs embedded inside LMS iframes (Canvas, Google Classroom).
  */
 
 (async function () {
@@ -24,6 +23,17 @@
     existing.style.display = existing.style.display === 'none' ? 'flex' : 'none';
     return;
   }
+
+  // Track the last focused input on Quill's page (ignoring HUD elements)
+  let lastFocusedInput = null;
+  window.addEventListener('focusin', (e) => {
+    if (e.target && (!e.target.closest || !e.target.closest('#' + HUD_ID))) {
+      const tag = e.target.tagName ? e.target.tagName.toLowerCase() : '';
+      if (tag === 'textarea' || tag === 'input' || e.target.isContentEditable) {
+        lastFocusedInput = e.target;
+      }
+    }
+  }, true);
 
   // 1. Safe capture-phase paste unblock (targeted strictly to paste & drop)
   try {
@@ -52,62 +62,75 @@
     return;
   }
 
-  // 3. React Fiber auto-fill
+  // 3. Isolated Input Finder (100% immune to finding HUD's own elements)
+  function findQuillInput() {
+    // Priority 1: User's last focused input on the page
+    if (lastFocusedInput && document.contains(lastFocusedInput) && (!lastFocusedInput.closest || !lastFocusedInput.closest('#' + HUD_ID))) {
+      return lastFocusedInput;
+    }
+
+    // Priority 2: Visible textareas outside HUD
+    const textareas = Array.from(document.querySelectorAll('textarea')).filter(el => !el.closest('#' + HUD_ID));
+    for (const ta of textareas) {
+      if (ta.offsetWidth > 0 || ta.offsetHeight > 0) return ta;
+    }
+    if (textareas.length > 0) return textareas[0];
+
+    // Priority 3: Visible text inputs outside HUD
+    const inputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])')).filter(el => !el.closest('#' + HUD_ID));
+    for (const inp of inputs) {
+      if (inp.offsetWidth > 0 || inp.offsetHeight > 0) return inp;
+    }
+
+    // Priority 4: Contenteditable elements outside HUD
+    const editables = Array.from(document.querySelectorAll('[contenteditable="true"]')).filter(el => !el.closest('#' + HUD_ID));
+    for (const ed of editables) {
+      if (ed.offsetWidth > 0 || ed.offsetHeight > 0) return ed;
+    }
+
+    // Priority 5: Iframes (Canvas / LMS embeds)
+    const iframes = Array.from(document.querySelectorAll('iframe'));
+    for (const iframe of iframes) {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        if (doc) {
+          const frameTa = doc.querySelector('textarea, input[type="text"], [contenteditable="true"]');
+          if (frameTa) return frameTa;
+        }
+      } catch (e) {}
+    }
+
+    return null;
+  }
+
+  // 4. React Fiber Auto-Fill
   function autoFillQuill(text) {
     if (!text || text === 'No answer found in database') return false;
 
-    // Multiple choice option check
-    const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper, .multiple-choice-option, [role="radio"], button.option'));
-    for (const label of labels) {
-      const labelText = (label.innerText || '').trim().toLowerCase();
+    // A. Multiple choice option check (outside HUD)
+    const options = Array.from(document.querySelectorAll('label, .ant-radio-wrapper, .multiple-choice-option, [role="radio"], button.option'))
+      .filter(el => !el.closest('#' + HUD_ID));
+
+    for (const opt of options) {
+      const optText = (opt.innerText || '').trim().toLowerCase();
       const cleanAnswer = text.trim().toLowerCase();
-      if (labelText && (labelText === cleanAnswer || labelText.includes(cleanAnswer) || cleanAnswer.includes(labelText))) {
-        const input = label.querySelector('input[type="radio"], input[type="checkbox"]');
-        if (input) input.click(); else label.click();
+      if (optText && (optText === cleanAnswer || optText.includes(cleanAnswer) || cleanAnswer.includes(optText))) {
+        const input = opt.querySelector('input[type="radio"], input[type="checkbox"]');
+        if (input) input.click(); else opt.click();
         return true;
       }
     }
 
-    // Locate active or visible textarea
-    const candidates = [
-      'textarea.connect-text-area',
-      '.connect-text-area textarea',
-      'textarea[placeholder*="sentence" i]',
-      'textarea[placeholder*="combine" i]',
-      'textarea[placeholder*="type" i]',
-      'textarea',
-      'input[type="text"].connect-input',
-      'input[type="text"]',
-      '[contenteditable="true"]'
-    ];
-
-    let target = null;
-    if (document.activeElement && (
-      document.activeElement.tagName === 'TEXTAREA' ||
-      (document.activeElement.tagName === 'INPUT' && document.activeElement.type === 'text') ||
-      document.activeElement.isContentEditable
-    )) {
-      target = document.activeElement;
-    }
-
+    // B. Locate Quill's actual input field
+    const target = findQuillInput();
     if (!target) {
-      for (const sel of candidates) {
-        const els = Array.from(document.querySelectorAll(sel));
-        for (const el of els) {
-          if (el.offsetWidth > 0 || el.offsetHeight > 0) {
-            target = el;
-            break;
-          }
-        }
-        if (target) break;
-      }
+      alert('Quill Assistant: Could not locate answer field. Please click inside the answer box first, then click Auto-Fill.');
+      return false;
     }
-
-    if (!target) target = document.querySelector('textarea, input[type="text"]');
-    if (!target) return false;
 
     target.focus();
 
+    // ContentEditable handling
     if (target.isContentEditable) {
       target.textContent = text;
       target.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
@@ -115,11 +138,13 @@
       return true;
     }
 
+    // React Native Prototype Setter
     const isTextArea = target instanceof HTMLTextAreaElement;
     const proto = isTextArea ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
     const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
     const nativeSetter = descriptor ? descriptor.set : null;
 
+    // Reset React 16/17/18 internal tracker
     if (target._valueTracker) {
       try { target._valueTracker.setValue(''); } catch (e) {}
     }
@@ -130,6 +155,21 @@
       target.value = text;
     }
 
+    // Direct React Fiber Props Notification
+    try {
+      const reactKey = Object.keys(target).find(k => k.startsWith('__reactProps$') || k.startsWith('__reactEventHandlers$'));
+      if (reactKey && target[reactKey]) {
+        const props = target[reactKey];
+        if (typeof props.onChange === 'function') {
+          props.onChange({ target, currentTarget: target, nativeEvent: new Event('change') });
+        }
+        if (typeof props.onInput === 'function') {
+          props.onInput({ target, currentTarget: target, nativeEvent: new Event('input') });
+        }
+      }
+    } catch (e) {}
+
+    // Dispatch full native and synthetic event sequence
     try {
       target.dispatchEvent(new InputEvent('input', {
         bubbles: true,
@@ -142,6 +182,7 @@
     }
 
     target.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+
     try {
       target.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
       target.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', bubbles: true }));
@@ -150,10 +191,11 @@
     if (typeof target.setSelectionRange === 'function') {
       target.setSelectionRange(text.length, text.length);
     }
+
     return true;
   }
 
-  // 4. Reliable dual-layer copy
+  // 5. Dual-layer copy
   async function copyToClipboard(text) {
     if (!text || text === 'No answer found in database') return false;
     if (navigator.clipboard && window.isSecureContext) {
@@ -181,7 +223,7 @@
     }
   }
 
-  // 5. Minimalist Off-White UI (Clean & Non-Intrusive)
+  // 6. Minimalist Off-White UI
   const hud = document.createElement('div');
   hud.id = HUD_ID;
   hud.style.cssText = `
@@ -297,7 +339,7 @@
 
   document.body.appendChild(hud);
 
-  // 6. Scoped Dragging (NO window.onmousemove overwriting!)
+  // Scoped Dragging
   const dragBar = document.getElementById('qa-drag');
   dragBar.addEventListener('mousedown', (e) => {
     if (e.target.tagName === 'BUTTON') return;
@@ -483,10 +525,8 @@
 
     document.getElementById('qa-scroll').innerHTML = html;
 
-    // 7. SAFE, THROTTLED DETECTION (Zero MutationObserver Loop!)
-    // Only runs every 800ms and ONLY modifies the DOM if the active question has changed.
+    // Guarded interval check for active question (scans Quill container, NOT document.body)
     function checkActiveQuestion() {
-      // Find active question text without layout thrashing
       const container = document.querySelector('.play-lesson, #play-lesson-app, .connect-container, main') || document.body;
       const text = container.innerText || '';
       let foundIdx = null;
@@ -499,7 +539,6 @@
         }
       }
 
-      // Guard: Only touch the DOM if index ACTUALLY changed
       if (foundIdx === currentActiveIndex) return;
 
       if (currentActiveIndex !== null) {
