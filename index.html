@@ -3,7 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quill Assistant</title>
+  <title>Quill Hacks — Quill.org Browser Assistant</title>
+  <meta name="description" content="Open-source browser utility and bookmarklet for Quill.org lessons, with clipboard accessibility tools and transparent installation instructions.">
+  <link rel="canonical" href="https://siguyyy.github.io/quill-hacks/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Quill Hacks — Quill.org Browser Assistant">
+  <meta property="og:description" content="Open-source browser utility and bookmarklet for Quill.org lessons.">
+  <meta property="og:url" content="https://siguyyy.github.io/quill-hacks/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Quill Hacks — Quill.org Browser Assistant">
+  <meta name="twitter:description" content="Open-source browser utility and bookmarklet for Quill.org lessons.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Quill Hacks",
+    "url": "https://siguyyy.github.io/quill-hacks/",
+    "description": "Open-source browser utility and bookmarklet for Quill.org lessons."
+  }
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -27,6 +45,16 @@
       font-weight: 600;
       letter-spacing: -0.01em;
       margin-bottom: 6px;
+    }
+    h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    h3 {
+      font-size: 13px;
+      font-weight: 600;
+      margin: 16px 0 6px;
     }
     p {
       font-size: 14px;
@@ -120,8 +148,8 @@
 
   <div class="wrapper">
     <header>
-      <h1>Quill Assistant</h1>
-      <p>A minimal, non-destructive bookmarklet for Quill.org lessons.</p>
+      <h1>Quill Hacks</h1>
+      <p>An open-source browser utility and bookmarklet for Quill.org lessons, with clipboard accessibility tools and transparent installation instructions.</p>
     </header>
 
     <!-- Bookmarklet Setup -->
@@ -150,8 +178,17 @@
       <button class="btn btn-secondary" onclick="simulateFill()">Test Auto-Fill</button>
     </div>
 
+    <div class="card">
+      <h2>About Quill Hacks</h2>
+      <p>Quill Hacks is a browser-side research and accessibility utility for Quill.org lessons. It provides bookmarklet and userscript installation options, clipboard tools, and a small companion interface.</p>
+      <h3>Privacy and limitations</h3>
+      <p>The tool runs in your browser. Review the source before use, understand the network requests it makes, and follow your school or institution's rules. This project is provided for educational, accessibility, and reverse-engineering research.</p>
+      <h3>Source and documentation</h3>
+      <p>Read the <a href="https://github.com/Siguyyy/quill-hacks" target="_blank" rel="noopener">source repository</a> for installation details, build instructions, license information, and troubleshooting.</p>
+    </div>
+
     <footer>
-      <span>MIT License • Inspired by <a href="https://github.com/MysticalMike60t/quill-cheat" target="_blank">MysticalMike60t/quill-cheat</a></span>
+      <span>MIT License • <a href="https://github.com/Siguyyy/quill-hacks" target="_blank" rel="noopener">Source on GitHub</a> • Inspired by <a href="https://github.com/MysticalMike60t/quill-cheat" target="_blank" rel="noopener">MysticalMike60t/quill-cheat</a></span>
     </footer>
   </div>
 
