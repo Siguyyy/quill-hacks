@@ -1,6 +1,6 @@
 # Quill Hacks
 
-A lightweight, non-destructive browser utility and bookmarklet for Quill.org lessons. Unblocks clipboard restrictions (paste, copy, drag-and-drop) and retrieves optimal answers directly from Quill's CMS.
+A lightweight, non-destructive browser utility and bookmarklet for Quill.org lessons. Unblocks clipboard restrictions (paste, copy, drag-and-drop) and retrieves optimal answers directly from Quill's CMS.\n\n**Live installer page:** [siguyyy.github.io/quill-hacks](https://siguyyy.github.io/quill-hacks/)
 
 Inspired by [ading2210/edpuzzle-answers](https://github.com/ading2210/edpuzzle-answers) and [MysticalMike60t/quill-cheat](https://github.com/MysticalMike60t/quill-cheat).
 
@@ -99,8 +99,8 @@ quill-hacks/
 ├── LICENSE
 ├── README.md
 ├── index.html                   # Minimalist local testing & installer page
-├── build.js                     # Minifier and bookmarklet packager
-├── dist/
+├── build.js                     # Dependency-free artifact builder
+├── .github/workflows/pages.yml  # GitHub Pages deployment\n├── .nojekyll                     # Keep Pages as a static site\n├── dist/
 │   ├── quill-assistant.min.js   # Production minified bundle for CDN loader
 │   ├── quill-assistant.user.js  # Tampermonkey userscript
 │   ├── bookmarklet-loader.txt   # Convenient 1-line loader bookmarklet
@@ -111,6 +111,18 @@ quill-hacks/
 ```
 
 ---
+
+## Development
+
+The repository publishes the static installer page at [siguyyy.github.io/quill-hacks](https://siguyyy.github.io/quill-hacks/) through GitHub Pages. The Pages workflow runs on every push to `main`.
+
+To rebuild the tracked artifacts locally:
+
+```bash
+npm run build
+```
+
+The build has no third-party dependencies. It regenerates the minified loader, standalone bookmarklet, root bookmarklet copy, and Tampermonkey userscript from `src/quill-assistant.js`.
 
 ## Credits & Acknowledgements
 
