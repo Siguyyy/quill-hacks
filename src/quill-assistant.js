@@ -1,45 +1,21 @@
 /**
- * Quill Master Assistant v2.0 (Apple Cupertino Glass Edition)
+ * Quill Master Assistant (Minimalist Anti-Slop Edition)
  * 
- * Rebuilt from the ground up inspired by MysticalMike60t/quill-cheat and ading2210/edpuzzle-answers.
- * 
- * Major Fixes & Enhancements in v2.0:
- * 1. 100% CSP-Immune Architecture: Replaced inline `onclick` attributes with centralized event
- *    delegation. Completely eliminates Content Security Policy blocking and quote-escaping bugs.
- * 2. Bulletproof React Auto-Fill: Bypasses React 16/17/18/19's `_valueTracker` and native prototype setters,
- *    dispatching synthetic `InputEvent('insertText')`, `change`, and keyboard triggers to ensure
- *    instant React state synchronization and form validation. Supports textareas, inputs, and multiple-choice options.
- * 3. Dual-Layer Resilient Clipboard: Features modern `navigator.clipboard.writeText` with an automatic,
- *    synchronous `document.execCommand('copy')` fallback for 100% reliable copying in all browser environments.
- * 4. Apple Cupertino Glass Design: Reimagined with translucent frosted acrylic, macOS traffic lights,
- *    SF Pro typography, subtle rim lighting, spring animations, and an iOS Dynamic Island notification pill.
- * 5. Instant Question Filtering: Live fuzzy/substring search bar to filter questions on the fly.
- * 6. Quick Action "Auto-Fill Active": Global button in the header bar to fill the on-screen active question in 1 click.
- * 7. Keyboard Shortcuts: `Alt + Q` to toggle HUD, `Alt + F` to auto-fill current question.
- * 
- * Special thanks to MysticalMike60t for the original proof-of-concept inspiration.
+ * Clean, lightweight, non-destructive assistant for Quill.org lessons.
+ * Off-white minimal aesthetic, CSP-immune event delegation, bulletproof React auto-fill.
  */
 
 (async function () {
   'use strict';
 
-  // Prevent multiple simultaneous initializations
   const HUD_ID = 'quill-assistant-hud';
-  const TOAST_ID = 'quill-dynamic-island-toast';
-  const existingHud = document.getElementById(HUD_ID);
-
-  if (existingHud) {
-    const isHidden = existingHud.style.display === 'none';
-    existingHud.style.display = isHidden ? 'flex' : 'none';
-    if (isHidden) {
-      showToast('💡 Quill Assistant Re-opened', 'info');
-    }
+  const existing = document.getElementById(HUD_ID);
+  if (existing) {
+    existing.style.display = existing.style.display === 'none' ? 'block' : 'none';
     return;
   }
 
-  // ============================================================================
-  // 1. NEUTRALIZE QUILL CAPTURE-PHASE CLIPBOARD BLOCKER
-  // ============================================================================
+  // 1. Bypass capture-phase paste restrictions
   try {
     const blockedEvents = new Set(['paste', 'copy', 'cut', 'drop', 'dragover', 'contextmenu', 'selectstart']);
     const origPreventDefault = Event.prototype.preventDefault;
@@ -55,22 +31,15 @@
     };
 
     ['onpaste', 'oncopy', 'oncut', 'ondrop'].forEach(h => {
-      try {
-        window[h] = null;
-        document[h] = null;
-      } catch (e) {}
+      try { window[h] = null; document[h] = null; } catch (e) {}
     });
 
-    // Inject permissive text selection styles
     const styleId = 'quill-assist-select-fix';
     if (!document.getElementById(styleId)) {
       const s = document.createElement('style');
       s.id = styleId;
       s.textContent = `
-        *, *::before, *::after {
-          -webkit-user-select: auto !important;
-          user-select: auto !important;
-        }
+        *, *::before, *::after { -webkit-user-select: auto !important; user-select: auto !important; }
         input, textarea, .connect-text-area, [contenteditable="true"] {
           -webkit-user-select: text !important;
           user-select: text !important;
@@ -79,48 +48,33 @@
       `;
       (document.head || document.documentElement).appendChild(s);
     }
-  } catch (e) {
-    console.warn('[Quill Assistant] Failed to patch paste restrictions:', e);
-  }
+  } catch (e) {}
 
-  // ============================================================================
-  // 2. EXTRACT ACTIVE LESSON ID
-  // ============================================================================
-  function getLessonId() {
-    const url = window.location.href;
-    const match = url.match(/\/lesson\/([a-zA-Z0-9\-]+)/i);
-    return match ? match[1] : null;
-  }
-
-  const lessonId = getLessonId();
+  // 2. Extract lesson ID
+  const match = window.location.href.match(/\/lesson\/([a-zA-Z0-9\-]+)/i);
+  const lessonId = match ? match[1] : null;
   if (!lessonId) {
-    alert('❌ Quill Assistant: No active lesson ID found in URL!\nPlease navigate to an active Quill lesson (e.g. /connect/#/play/lesson/...).');
+    alert('Quill Assistant: Please open an active lesson (/connect/#/play/lesson/...).');
     return;
   }
 
-  // ============================================================================
-  // 3. BULLETPROOF REACT AUTO-FILL & INPUT DISPATCHER
-  // ============================================================================
+  // 3. React Fiber auto-fill bypass
   function autoFillQuill(text) {
     if (!text || text === 'No answer found in database') return false;
 
-    // A. Priority 1: Check if this is a multiple choice activity
+    // Multiple choice option check
     const labels = Array.from(document.querySelectorAll('label, .ant-radio-wrapper, .multiple-choice-option, [role="radio"], button.option'));
     for (const label of labels) {
       const labelText = label.innerText ? label.innerText.trim().toLowerCase() : '';
       const cleanAnswer = text.trim().toLowerCase();
       if (labelText && (labelText === cleanAnswer || labelText.includes(cleanAnswer) || cleanAnswer.includes(labelText))) {
         const input = label.querySelector('input[type="radio"], input[type="checkbox"]');
-        if (input) {
-          input.click();
-        } else {
-          label.click();
-        }
+        if (input) input.click(); else label.click();
         return true;
       }
     }
 
-    // B. Priority 2: Locate Quill Textarea or Input field
+    // Locate active or visible textarea
     const candidates = [
       'textarea.connect-text-area',
       '.connect-text-area textarea',
@@ -134,8 +88,6 @@
     ];
 
     let target = null;
-
-    // Check active focused element first
     if (document.activeElement && (
       document.activeElement.tagName === 'TEXTAREA' ||
       (document.activeElement.tagName === 'INPUT' && document.activeElement.type === 'text') ||
@@ -144,7 +96,6 @@
       target = document.activeElement;
     }
 
-    // Search visible candidates
     if (!target) {
       for (const sel of candidates) {
         const els = Array.from(document.querySelectorAll(sel));
@@ -159,16 +110,11 @@
       }
     }
 
-    // Ultimate fallback
-    if (!target) {
-      target = document.querySelector('textarea, input[type="text"], [contenteditable="true"]');
-    }
-
+    if (!target) target = document.querySelector('textarea, input[type="text"], [contenteditable="true"]');
     if (!target) return false;
 
     target.focus();
 
-    // ContentEditable handling
     if (target.isContentEditable) {
       target.textContent = text;
       target.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
@@ -176,17 +122,13 @@
       return true;
     }
 
-    // React Fiber & Native Prototype Setter Bypass
     const isTextArea = target instanceof HTMLTextAreaElement;
     const proto = isTextArea ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
     const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
     const nativeSetter = descriptor ? descriptor.set : null;
 
-    // Reset React's private _valueTracker to force re-render detection
     if (target._valueTracker) {
-      try {
-        target._valueTracker.setValue('');
-      } catch (e) {}
+      try { target._valueTracker.setValue(''); } catch (e) {}
     }
 
     if (nativeSetter) {
@@ -195,7 +137,6 @@
       target.value = text;
     }
 
-    // Dispatch comprehensive native and synthetic events
     try {
       target.dispatchEvent(new InputEvent('input', {
         bubbles: true,
@@ -208,554 +149,283 @@
     }
 
     target.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-
-    // Simulate keydown & keyup to trigger character counters / validation listeners
     try {
       target.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
       target.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', bubbles: true }));
     } catch (e) {}
 
-    // Place caret at the end of the input
     if (typeof target.setSelectionRange === 'function') {
       target.setSelectionRange(text.length, text.length);
     }
-
     return true;
   }
 
-  // ============================================================================
-  // 4. BULLETPROOF DUAL-LAYER CLIPBOARD COPY
-  // ============================================================================
+  // 4. Reliable dual-layer copy
   async function copyToClipboard(text) {
     if (!text || text === 'No answer found in database') return false;
-
-    // Layer 1: Modern Async Clipboard API
     if (navigator.clipboard && window.isSecureContext) {
       try {
         await navigator.clipboard.writeText(text);
         return true;
-      } catch (err) {
-        console.warn('[Quill Assistant] navigator.clipboard failed, attempting fallback...', err);
-      }
+      } catch (err) {}
     }
-
-    // Layer 2: Synchronous document.execCommand Fallback
     try {
       const ta = document.createElement('textarea');
       ta.value = text;
       ta.style.position = 'fixed';
       ta.style.left = '-9999px';
       ta.style.top = '-9999px';
-      ta.style.opacity = '0';
       ta.setAttribute('readonly', '');
       document.body.appendChild(ta);
       ta.focus();
       ta.select();
       ta.setSelectionRange(0, 99999);
-      const successful = document.execCommand('copy');
+      const success = document.execCommand('copy');
       document.body.removeChild(ta);
-      return successful;
+      return success;
     } catch (err) {
-      console.error('[Quill Assistant] Fallback copy failed:', err);
       return false;
     }
   }
 
-  // ============================================================================
-  // 5. APPLE DYNAMIC ISLAND TOAST NOTIFICATION
-  // ============================================================================
-  function showToast(message, type = 'info') {
-    let toast = document.getElementById(TOAST_ID);
-    if (!toast) {
-      toast = document.createElement('div');
-      toast.id = TOAST_ID;
-      toast.style.cssText = `
-        position: fixed;
-        top: 24px;
-        left: 50%;
-        transform: translateX(-50%) translateY(-20px) scale(0.95);
-        background: rgba(28, 28, 30, 0.88);
-        -webkit-backdrop-filter: blur(25px) saturate(190%);
-        backdrop-filter: blur(25px) saturate(190%);
-        color: #f5f5f7;
-        padding: 9px 20px;
-        border-radius: 980px;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
-        font-size: 13px;
-        font-weight: 500;
-        letter-spacing: -0.01em;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.12);
-        z-index: 2147483647;
-        opacity: 0;
-        pointer-events: none;
-        transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-      `;
-      document.body.appendChild(toast);
-    }
-
-    const icons = {
-      success: '✨',
-      warning: '⚠️',
-      error: '✕',
-      info: '💡'
-    };
-
-    toast.innerHTML = `<span style="font-size: 14px;">${icons[type] || '✨'}</span><span>${message}</span>`;
-    
-    // Animate in
-    requestAnimationFrame(() => {
-      toast.style.opacity = '1';
-      toast.style.transform = 'translateX(-50%) translateY(0) scale(1)';
-    });
-
-    clearTimeout(toast._timer);
-    toast._timer = setTimeout(() => {
-      toast.style.opacity = '0';
-      toast.style.transform = 'translateX(-50%) translateY(-20px) scale(0.95)';
-    }, 2400);
-  }
-
-  // ============================================================================
-  // 6. BUILD APPLE CUPERTINO GLASS HUD INTERFACE
-  // ============================================================================
+  // 5. Minimalist Off-White UI (Anti-Slop)
   const hud = document.createElement('div');
   hud.id = HUD_ID;
   hud.style.cssText = `
     position: fixed;
-    top: 24px;
-    right: 24px;
-    width: 440px;
-    max-height: 86vh;
-    background: rgba(28, 28, 32, 0.82);
-    -webkit-backdrop-filter: blur(30px) saturate(190%);
-    backdrop-filter: blur(30px) saturate(190%);
-    color: #f5f5f7;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 20px;
-    box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    top: 20px;
+    right: 20px;
+    width: 380px;
+    max-height: 85vh;
+    background: #fafaf8;
+    color: #1a1a18;
+    border: 1px solid #e2e2de;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 13px;
-    z-index: 2147483646;
+    z-index: 2147483647;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), height 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+    line-height: 1.45;
   `;
 
   hud.innerHTML = `
     <style>
       #${HUD_ID} * { box-sizing: border-box; margin: 0; padding: 0; }
-      
-      /* macOS Traffic Light Buttons */
-      .qa-traffic-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        border: none;
-        transition: transform 0.15s ease, filter 0.15s ease;
-      }
-      .qa-traffic-dot:hover { filter: brightness(1.15); transform: scale(1.1); }
-      .qa-dot-close { background: #ff5f57; border: 1px solid #e0443e; }
-      .qa-dot-min { background: #febc2e; border: 1px solid #d89e24; }
-      .qa-dot-dock { background: #28c840; border: 1px solid #1aab29; }
-
-      /* Apple Pill Buttons */
-      .qa-pill-btn {
-        background: rgba(255, 255, 255, 0.08);
-        color: #f5f5f7;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 980px;
-        padding: 6px 14px;
+      .qa-btn {
+        background: #ffffff;
+        color: #222220;
+        border: 1px solid #d5d5cf;
+        border-radius: 6px;
+        padding: 4px 10px;
         font-size: 12px;
         font-weight: 500;
         cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: background 0.12s, border-color 0.12s;
         user-select: none;
       }
-      .qa-pill-btn:hover {
-        background: rgba(255, 255, 255, 0.14);
-        border-color: rgba(255, 255, 255, 0.2);
-        transform: translateY(-1px);
-      }
-      .qa-pill-btn:active {
-        transform: scale(0.96);
-      }
-      .qa-pill-primary {
-        background: linear-gradient(180deg, #0a84ff 0%, #0066cc 100%);
+      .qa-btn:hover { background: #f0f0eb; border-color: #c0c0ba; }
+      .qa-btn:active { background: #e5e5df; }
+      .qa-btn-dark {
+        background: #1a1a18;
         color: #ffffff;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        box-shadow: 0 4px 14px rgba(10, 132, 255, 0.35);
+        border: 1px solid #1a1a18;
       }
-      .qa-pill-primary:hover {
-        background: linear-gradient(180deg, #1a8eff 0%, #0077ed 100%);
-        box-shadow: 0 6px 18px rgba(10, 132, 255, 0.45);
-      }
-      .qa-pill-success {
-        background: linear-gradient(180deg, #30d158 0%, #24a843 100%) !important;
-        color: #ffffff !important;
-        border-color: rgba(255, 255, 255, 0.3) !important;
-        box-shadow: 0 4px 14px rgba(48, 209, 88, 0.35) !important;
-      }
-
-      /* Apple Question Card */
+      .qa-btn-dark:hover { background: #333330; border-color: #333330; }
       .qa-card {
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 14px;
-        padding: 14px;
+        background: #ffffff;
+        border: 1px solid #e8e8e3;
+        border-radius: 8px;
+        padding: 12px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-      }
-      .qa-card:hover {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: rgba(255, 255, 255, 0.14);
+        gap: 6px;
       }
       .qa-card.active-q {
-        border-color: rgba(10, 132, 255, 0.7);
-        background: rgba(10, 132, 255, 0.08);
-        box-shadow: 0 0 24px rgba(10, 132, 255, 0.2), inset 0 0 0 1px rgba(10, 132, 255, 0.3);
+        border-color: #1a1a18;
+        box-shadow: 0 0 0 1px #1a1a18;
       }
-
-      /* Subtle Badges */
-      .qa-badge {
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-        padding: 3px 8px;
-        border-radius: 980px;
-      }
-      .qa-badge-optimal {
-        background: rgba(48, 209, 88, 0.16);
-        color: #30d158;
-        border: 1px solid rgba(48, 209, 88, 0.25);
-      }
-      .qa-badge-active {
-        background: rgba(10, 132, 255, 0.2);
-        color: #64d2ff;
-        border: 1px solid rgba(10, 132, 255, 0.35);
-        animation: qa-pulse 2s infinite ease-in-out;
-      }
-
-      @keyframes qa-pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.6; }
-      }
-
-      /* Inset Answer Box */
-      .qa-answer-box {
-        background: rgba(0, 0, 0, 0.4);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        border-radius: 10px;
-        padding: 10px 12px;
-        color: #64d2ff;
-        font-family: "SF Mono", Monaco, "Courier New", monospace;
+      .qa-answer {
+        background: #f4f4f0;
+        border: 1px solid #e2e2dc;
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         font-size: 12px;
-        line-height: 1.45;
+        color: #111110;
         word-break: break-word;
       }
-
-      /* Search Bar */
-      .qa-search-input {
+      .qa-search {
         width: 100%;
-        background: rgba(0, 0, 0, 0.3);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        padding: 8px 12px 8px 32px;
-        color: #f5f5f7;
+        background: #ffffff;
+        border: 1px solid #d8d8d2;
+        border-radius: 6px;
+        padding: 6px 10px;
         font-size: 12px;
+        color: #1a1a18;
         outline: none;
-        transition: border-color 0.2s, background 0.2s;
       }
-      .qa-search-input:focus {
-        border-color: #0a84ff;
-        background: rgba(0, 0, 0, 0.5);
-      }
-      .qa-search-input::placeholder {
-        color: rgba(245, 245, 247, 0.4);
-      }
-
-      /* Custom Cupertino Scrollbar */
-      #qa-scroll-area::-webkit-scrollbar { width: 6px; }
-      #qa-scroll-area::-webkit-scrollbar-track { background: transparent; }
-      #qa-scroll-area::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.16);
-        border-radius: 980px;
-      }
-      #qa-scroll-area::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.28);
-      }
+      .qa-search:focus { border-color: #1a1a18; }
+      #qa-scroll::-webkit-scrollbar { width: 5px; }
+      #qa-scroll::-webkit-scrollbar-track { background: transparent; }
+      #qa-scroll::-webkit-scrollbar-thumb { background: #d0d0c8; border-radius: 4px; }
     </style>
 
-    <!-- Header & Chrome Bar -->
-    <div id="qa-chrome" style="padding: 14px 18px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none;">
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <div style="display: flex; gap: 7px;">
-          <button class="qa-traffic-dot qa-dot-close" id="qa-btn-close" title="Close HUD"></button>
-          <button class="qa-traffic-dot qa-dot-min" id="qa-btn-min" title="Minimize / Expand"></button>
-          <button class="qa-traffic-dot qa-dot-dock" id="qa-btn-dock" title="Dock Side"></button>
-        </div>
-        <div style="margin-left: 6px;">
-          <div style="font-weight: 600; font-size: 13px; color: #f5f5f7; letter-spacing: -0.01em;">Quill Assistant</div>
-        </div>
-      </div>
+    <!-- Header -->
+    <div id="qa-drag" style="padding: 12px 14px; background: #fafaf8; border-bottom: 1px solid #e8e8e3; display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none;">
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #30d158; box-shadow: 0 0 8px #30d158;"></span>
-        <span style="font-size: 11px; font-weight: 500; color: rgba(245, 245, 247, 0.6);" id="qa-status-pill">Ready</span>
+        <span style="font-weight: 600; font-size: 13px;">Quill Assistant</span>
+        <span id="qa-count" style="font-size: 11px; background: #eaeae5; color: #555550; padding: 2px 6px; border-radius: 4px;">Loading...</span>
+      </div>
+      <div style="display: flex; gap: 4px;">
+        <button id="qa-min" class="qa-btn" style="padding: 2px 7px; font-size: 11px;" title="Minimize">—</button>
+        <button id="qa-close" class="qa-btn" style="padding: 2px 7px; font-size: 11px;" title="Close">✕</button>
       </div>
     </div>
 
-    <!-- Quick Fill & Search Bar -->
-    <div id="qa-toolbar" style="padding: 12px 18px 8px 18px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
-      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-        <button class="qa-pill-btn qa-pill-primary" id="qa-btn-fill-active" style="width: 100%; justify-content: center; padding: 8px 16px;">
-          <span>⚡</span>
-          <span>Auto-Fill Current Question</span>
+    <!-- Quick action & search -->
+    <div id="qa-body" style="display: flex; flex-direction: column; overflow: hidden;">
+      <div style="padding: 10px 14px; border-bottom: 1px solid #eeeeea; display: flex; flex-direction: column; gap: 8px;">
+        <button id="qa-fill-current" class="qa-btn qa-btn-dark" style="width: 100%; padding: 7px 12px; font-weight: 500;">
+          Auto-Fill Active Question
         </button>
+        <input type="text" id="qa-filter" class="qa-search" placeholder="Search questions..." />
       </div>
-      <div style="position: relative;">
-        <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: rgba(245, 245, 247, 0.4); pointer-events: none;">🔍</span>
-        <input type="text" class="qa-search-input" id="qa-search" placeholder="Search prompts or answers..." autocomplete="off" />
-      </div>
-    </div>
 
-    <!-- Main Scrollable Question Content -->
-    <div id="qa-scroll-area" style="padding: 14px 18px; overflow-y: auto; max-height: calc(86vh - 130px); display: flex; flex-direction: column; gap: 12px;">
-      <div id="qa-loading" style="text-align: center; padding: 36px 0; color: rgba(245, 245, 247, 0.6);">
-        <div style="display: inline-block; width: 22px; height: 22px; border: 2.5px solid rgba(255, 255, 255, 0.2); border-top-color: #0a84ff; border-radius: 50%; animation: qa-spin 0.75s linear infinite;"></div>
-        <div style="margin-top: 12px; font-size: 12px; font-weight: 500;">Connecting to Quill CMS...</div>
+      <!-- Question List -->
+      <div id="qa-scroll" style="padding: 12px 14px; overflow-y: auto; max-height: calc(85vh - 125px); display: flex; flex-direction: column; gap: 10px;">
+        <div id="qa-loading" style="text-align: center; padding: 24px 0; color: #777770;">
+          Fetching lesson answers...
+        </div>
       </div>
-    </div>
 
-    <!-- Minimal Footer -->
-    <div id="qa-footer" style="padding: 8px 18px; border-top: 1px solid rgba(255, 255, 255, 0.06); display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: rgba(245, 245, 247, 0.4);">
-      <span>🔓 Clipboard Unlocked</span>
-      <span>Press <strong>Alt + Q</strong> to toggle</span>
+      <!-- Footer -->
+      <div style="padding: 6px 14px; border-top: 1px solid #eeeeea; display: flex; justify-content: space-between; font-size: 11px; color: #888880; background: #fafaf8;">
+        <span>Clipboard Unlocked 🔓</span>
+        <span>Alt+Q: Toggle • Alt+F: Fill</span>
+      </div>
     </div>
   `;
 
   document.body.appendChild(hud);
 
-  // ============================================================================
-  // 7. DRAG-AND-DROP HUD REPOSITIONING
-  // ============================================================================
-  const chromeHeader = document.getElementById('qa-chrome');
-  let isDragging = false;
-  let startX, startY, origLeft, origTop;
-
-  chromeHeader.addEventListener('mousedown', (e) => {
-    if (e.target.closest('button')) return;
+  // Dragging
+  const dragBar = document.getElementById('qa-drag');
+  let isDragging = false, startX, startY, origX, origY;
+  dragBar.addEventListener('mousedown', (e) => {
+    if (e.target.tagName === 'BUTTON') return;
     isDragging = true;
-    startX = e.clientX;
-    startY = e.clientY;
+    startX = e.clientX; startY = e.clientY;
     const rect = hud.getBoundingClientRect();
-    origLeft = rect.left;
-    origTop = rect.top;
-    hud.style.right = 'auto';
-    hud.style.bottom = 'auto';
-    hud.style.left = `${origLeft}px`;
-    hud.style.top = `${origTop}px`;
-    document.body.style.userSelect = 'none';
+    origX = rect.left; origY = rect.top;
+    hud.style.right = 'auto'; hud.style.left = `${origX}px`; hud.style.top = `${origY}px`;
   });
-
   window.addEventListener('mousemove', (e) => {
     if (!isDragging) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    hud.style.left = `${origLeft + dx}px`;
-    hud.style.top = `${Math.max(10, origTop + dy)}px`;
+    hud.style.left = `${origX + (e.clientX - startX)}px`;
+    hud.style.top = `${Math.max(10, origY + (e.clientY - startY))}px`;
   });
+  window.addEventListener('mouseup', () => { isDragging = false; });
 
-  window.addEventListener('mouseup', () => {
-    if (isDragging) {
-      isDragging = false;
-      document.body.style.userSelect = '';
-    }
-  });
+  // Window Controls
+  const bodyEl = document.getElementById('qa-body');
+  const minBtn = document.getElementById('qa-min');
+  let isMin = false;
+  minBtn.onclick = () => {
+    isMin = !isMin;
+    bodyEl.style.display = isMin ? 'none' : 'flex';
+    minBtn.textContent = isMin ? '□' : '—';
+  };
+  document.getElementById('qa-close').onclick = () => hud.remove();
 
-  // ============================================================================
-  // 8. WINDOW CONTROLS (MINIMIZE, CLOSE, DOCK)
-  // ============================================================================
-  const scrollArea = document.getElementById('qa-scroll-area');
-  const toolbar = document.getElementById('qa-toolbar');
-  const footer = document.getElementById('qa-footer');
-  const btnClose = document.getElementById('qa-btn-close');
-  const btnMin = document.getElementById('qa-btn-min');
-  const btnDock = document.getElementById('qa-btn-dock');
-  let isMinimized = false;
-  let isDockedLeft = false;
-
-  btnClose.addEventListener('click', () => {
-    hud.remove();
-    showToast('Quill Assistant Closed', 'info');
-  });
-
-  btnMin.addEventListener('click', () => {
-    isMinimized = !isMinimized;
-    toolbar.style.display = isMinimized ? 'none' : 'flex';
-    scrollArea.style.display = isMinimized ? 'none' : 'flex';
-    footer.style.display = isMinimized ? 'none' : 'flex';
-    hud.style.width = isMinimized ? '220px' : '440px';
-  });
-
-  btnDock.addEventListener('click', () => {
-    isDockedLeft = !isDockedLeft;
-    hud.style.top = '24px';
-    if (isDockedLeft) {
-      hud.style.left = '24px';
-      hud.style.right = 'auto';
-    } else {
-      hud.style.right = '24px';
-      hud.style.left = 'auto';
-    }
-  });
-
-  // ============================================================================
-  // 9. CENTRALIZED EVENT DELEGATION (100% CSP IMMUNE)
-  // ============================================================================
+  // Event Delegation for Buttons
   let lessonQuestions = [];
-  let currentActiveQuestionIndex = null;
+  let currentActiveIndex = null;
 
   hud.addEventListener('click', async (e) => {
-    // A. Auto-Fill Button Clicked
-    const fillBtn = e.target.closest('.qa-btn-fill');
+    const fillBtn = e.target.closest('.qa-card-fill');
     if (fillBtn) {
       const idx = parseInt(fillBtn.dataset.index, 10);
       const q = lessonQuestions[idx];
       if (q && q.bestAnswer) {
-        const success = autoFillQuill(q.bestAnswer);
-        if (success) {
-          showToast(`Filled Question ${q.index}!`, 'success');
-          fillBtn.innerHTML = '✓ Filled';
-          fillBtn.classList.add('qa-pill-success');
-          setTimeout(() => {
-            fillBtn.innerHTML = 'Auto-Fill';
-            fillBtn.classList.remove('qa-pill-success');
-          }, 1500);
-        } else {
-          showToast('Could not find active input field', 'warning');
+        const ok = autoFillQuill(q.bestAnswer);
+        if (ok) {
+          fillBtn.textContent = 'Filled ✓';
+          setTimeout(() => { fillBtn.textContent = 'Auto-Fill'; }, 1200);
         }
       }
       return;
     }
 
-    // B. Copy Button Clicked
-    const copyBtn = e.target.closest('.qa-btn-copy');
+    const copyBtn = e.target.closest('.qa-card-copy');
     if (copyBtn) {
       const idx = parseInt(copyBtn.dataset.index, 10);
       const q = lessonQuestions[idx];
       if (q && q.bestAnswer) {
-        const success = await copyToClipboard(q.bestAnswer);
-        if (success) {
-          showToast(`Copied Answer Q${q.index}!`, 'success');
-          copyBtn.innerHTML = '✓ Copied';
-          copyBtn.classList.add('qa-pill-success');
-          setTimeout(() => {
-            copyBtn.innerHTML = 'Copy';
-            copyBtn.classList.remove('qa-pill-success');
-          }, 1500);
-        } else {
-          showToast('Copying failed', 'error');
+        const ok = await copyToClipboard(q.bestAnswer);
+        if (ok) {
+          copyBtn.textContent = 'Copied ✓';
+          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1200);
         }
       }
       return;
     }
 
-    // C. Global Auto-Fill Current Button
-    if (e.target.closest('#qa-btn-fill-active')) {
-      let targetQ = null;
-      if (currentActiveQuestionIndex !== null) {
-        targetQ = lessonQuestions[currentActiveQuestionIndex];
-      }
-      if (!targetQ && lessonQuestions.length > 0) {
-        // Fallback to first question
-        targetQ = lessonQuestions[0];
-      }
-
+    if (e.target.closest('#qa-fill-current')) {
+      const targetQ = (currentActiveIndex !== null && lessonQuestions[currentActiveIndex])
+        ? lessonQuestions[currentActiveIndex]
+        : lessonQuestions[0];
       if (targetQ && targetQ.bestAnswer) {
-        const success = autoFillQuill(targetQ.bestAnswer);
-        if (success) {
-          showToast(`Auto-filled Q${targetQ.index}!`, 'success');
-        } else {
-          showToast('No active input detected on screen', 'warning');
-        }
-      } else {
-        showToast('No answer available to fill', 'warning');
+        autoFillQuill(targetQ.bestAnswer);
       }
-      return;
     }
   });
 
-  // ============================================================================
-  // 10. REAL-TIME SEARCH & FILTER
-  // ============================================================================
-  const searchInput = document.getElementById('qa-search');
-  searchInput.addEventListener('input', (e) => {
-    const query = e.target.value.toLowerCase().trim();
+  // Filter input
+  const filterInput = document.getElementById('qa-filter');
+  filterInput.addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase().trim();
     lessonQuestions.forEach((q, idx) => {
       const card = document.getElementById(`qa-card-${idx}`);
       if (!card) return;
-      if (!query) {
-        card.style.display = 'flex';
-        return;
-      }
-      const match = (q.promptText && q.promptText.toLowerCase().includes(query)) ||
-                    (q.bestAnswer && q.bestAnswer.toLowerCase().includes(query)) ||
-                    (q.cues && q.cues.toLowerCase().includes(query)) ||
-                    (`q${q.index}`.includes(query));
+      if (!term) { card.style.display = 'flex'; return; }
+      const match = (q.promptText && q.promptText.toLowerCase().includes(term)) ||
+                    (q.bestAnswer && q.bestAnswer.toLowerCase().includes(term)) ||
+                    (`q${q.index}`.includes(term));
       card.style.display = match ? 'flex' : 'none';
     });
   });
 
-  // ============================================================================
-  // 11. FETCH LESSON QUESTIONS & CMS OPTIMAL RESPONSES
-  // ============================================================================
+  // Fetch Questions & Answers
   try {
     const lessonRes = await fetch(`https://www.quill.org/api/v1/lessons/${lessonId}.json`);
-    if (!lessonRes.ok) throw new Error(`Quill Lesson API returned HTTP ${lessonRes.status}`);
+    if (!lessonRes.ok) throw new Error(`Quill API HTTP ${lessonRes.status}`);
     const lessonData = await lessonRes.json();
     const rawQuestions = lessonData.questions || [];
 
     if (rawQuestions.length === 0) {
-      scrollArea.innerHTML = `<div style="text-align: center; padding: 24px; color: #ff5f57;">No questions found in this lesson.</div>`;
+      document.getElementById('qa-scroll').innerHTML = '<div style="color: #c0392b; padding: 12px; text-align: center;">No questions found.</div>';
       return;
     }
 
-    document.getElementById('qa-status-pill').textContent = `${rawQuestions.length} Questions`;
+    document.getElementById('qa-count').textContent = `${rawQuestions.length} Questions`;
 
-    // Fetch details in parallel
     lessonQuestions = await Promise.all(
       rawQuestions.map(async (item, idx) => {
         const key = item.key;
-        let promptText = '';
-        let instructions = '';
-        let cues = '';
-        let answers = [];
+        let promptText = '', cues = '', answers = [];
 
-        // 1. Fetch Question details
         try {
           const qRes = await fetch(`https://www.quill.org/api/v1/questions/${key}.json`);
           if (qRes.ok) {
             const qData = await qRes.json();
             promptText = (qData.prompt || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-            instructions = qData.instructions || '';
             cues = qData.cues || '';
           }
         } catch (e) {}
 
-        // 2. Fetch CMS optimal responses
         try {
           const cmsRes = await fetch(`https://cms.quill.org/questions/${key}/responses`);
           if (cmsRes.ok) {
@@ -767,7 +437,6 @@
           }
         } catch (e) {}
 
-        // 3. Fallback: multiple choice options
         if (answers.length === 0) {
           try {
             const mcRes = await fetch(`https://cms.quill.org/questions/${key}/multiple_choice_options`);
@@ -781,143 +450,83 @@
         }
 
         const validAnswers = answers.map(a => a.text).filter(Boolean);
-        const bestAnswer = validAnswers[0] || 'No answer found in database';
-
         return {
           index: idx + 1,
           key,
           promptText,
-          instructions,
           cues,
-          bestAnswer,
-          hasOptimal: answers.some(a => a.optimal)
+          bestAnswer: validAnswers[0] || 'No answer found in database',
+          isOptimal: answers.some(a => a.optimal)
         };
       })
     );
 
-    // Render cards safely
     let html = '';
     lessonQuestions.forEach((q, idx) => {
-      const displayPrompt = q.promptText || `Question ${q.index}`;
       html += `
         <div class="qa-card" id="qa-card-${idx}">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <strong style="color: #64d2ff; font-size: 12px; font-weight: 700;">Q${q.index}</strong>
-              <span class="qa-badge ${q.hasOptimal ? 'qa-badge-optimal' : ''}" id="qa-badge-${idx}">
-                ${q.hasOptimal ? 'Optimal' : 'Standard'}
-              </span>
-            </div>
-            <span class="qa-badge qa-badge-active" id="qa-active-pill-${idx}" style="display: none;">Active</span>
+            <span style="font-weight: 600; font-size: 12px;">Q${q.index}</span>
+            <span style="font-size: 11px; color: ${q.isOptimal ? '#27ae60' : '#7f8c8d'};">
+              ${q.isOptimal ? 'Optimal Answer' : 'Standard'}
+            </span>
           </div>
-
-          <div style="font-size: 12px; color: #e5e5ea; line-height: 1.45;">
-            ${displayPrompt}
-          </div>
-
-          ${q.cues ? `
-            <div style="font-size: 11px; color: #ffd60a; display: flex; align-items: center; gap: 4px;">
-              <span>⚡ Hint:</span>
-              <em style="font-style: normal; opacity: 0.9;">${q.cues}</em>
-            </div>
-          ` : ''}
-
-          <div class="qa-answer-box">
-            ${q.bestAnswer}
-          </div>
-
-          <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px;">
-            <button class="qa-pill-btn qa-btn-copy" data-index="${idx}">
-              Copy
-            </button>
-            <button class="qa-pill-btn qa-pill-primary qa-btn-fill" data-index="${idx}">
-              Auto-Fill
-            </button>
+          <div style="font-size: 12px; color: #444440;">${q.promptText || `Question ${q.index}`}</div>
+          ${q.cues ? `<div style="font-size: 11px; color: #d35400;">Hint: <em>${q.cues}</em></div>` : ''}
+          <div class="qa-answer">${q.bestAnswer}</div>
+          <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px;">
+            <button class="qa-btn qa-card-copy" data-index="${idx}">Copy</button>
+            <button class="qa-btn qa-btn-dark qa-card-fill" data-index="${idx}">Auto-Fill</button>
           </div>
         </div>
       `;
     });
 
-    scrollArea.innerHTML = html;
-    showToast(`Loaded ${lessonQuestions.length} Questions!`, 'success');
+    document.getElementById('qa-scroll').innerHTML = html;
 
-    // ============================================================================
-    // 12. ACTIVE ON-SCREEN QUESTION DETECTION
-    // ============================================================================
-    function updateActiveQuestion() {
-      const pageText = document.body.innerText;
-      let foundIndex = null;
-
+    // Active question detection
+    function detectActive() {
+      const text = document.body.innerText;
+      let activeIdx = null;
       lessonQuestions.forEach((q, idx) => {
         const card = document.getElementById(`qa-card-${idx}`);
-        const activePill = document.getElementById(`qa-active-pill-${idx}`);
         if (!card) return;
-
-        // Check if a prominent slice of the prompt is currently in the DOM
-        const isCurrentlyActive = q.promptText && q.promptText.length > 15 && pageText.includes(q.promptText.slice(0, 32));
-
-        if (isCurrentlyActive && foundIndex === null) {
-          foundIndex = idx;
+        const isActive = q.promptText && q.promptText.length > 15 && text.includes(q.promptText.slice(0, 32));
+        if (isActive && activeIdx === null) {
+          activeIdx = idx;
           card.classList.add('active-q');
-          if (activePill) activePill.style.display = 'inline-block';
         } else {
           card.classList.remove('active-q');
-          if (activePill) activePill.style.display = 'none';
         }
       });
-
-      currentActiveQuestionIndex = foundIndex;
-      const fillActiveBtn = document.getElementById('qa-btn-fill-active');
-      if (fillActiveBtn) {
-        if (foundIndex !== null) {
-          fillActiveBtn.innerHTML = `<span>⚡</span><span>Auto-Fill Q${lessonQuestions[foundIndex].index}</span>`;
-        } else {
-          fillActiveBtn.innerHTML = `<span>⚡</span><span>Auto-Fill Current Question</span>`;
-        }
+      currentActiveIndex = activeIdx;
+      const fillBtn = document.getElementById('qa-fill-current');
+      if (fillBtn) {
+        fillBtn.textContent = activeIdx !== null
+          ? `Auto-Fill Q${lessonQuestions[activeIdx].index}`
+          : 'Auto-Fill Active Question';
       }
     }
 
-    updateActiveQuestion();
-    const observer = new MutationObserver(updateActiveQuestion);
-    observer.observe(document.body, { childList: true, subtree: true });
+    detectActive();
+    new MutationObserver(detectActive).observe(document.body, { childList: true, subtree: true });
 
   } catch (err) {
-    console.error('[Quill Assistant Error]', err);
-    scrollArea.innerHTML = `
-      <div style="color: #ff5f57; padding: 20px; text-align: center;">
-        <strong style="font-size: 13px;">Error Loading Activity Data</strong>
-        <p style="font-size: 11px; margin-top: 6px; opacity: 0.8;">${err.message}</p>
-      </div>
-    `;
+    document.getElementById('qa-scroll').innerHTML = `<div style="color: #c0392b; padding: 12px;">Failed to load lesson: ${err.message}</div>`;
   }
 
-  // ============================================================================
-  // 13. GLOBAL KEYBOARD SHORTCUTS
-  // ============================================================================
+  // Keyboard shortcuts
   window.addEventListener('keydown', (e) => {
-    // Alt + Q: Toggle HUD
     if (e.altKey && (e.key === 'q' || e.key === 'Q')) {
       e.preventDefault();
-      const isHidden = hud.style.display === 'none';
-      hud.style.display = isHidden ? 'flex' : 'none';
-      showToast(isHidden ? '💡 Quill Assistant Opened' : 'Minimized Assistant', 'info');
+      hud.style.display = hud.style.display === 'none' ? 'flex' : 'none';
     }
-
-    // Alt + F: Fill active question
     if (e.altKey && (e.key === 'f' || e.key === 'F')) {
       e.preventDefault();
-      if (currentActiveQuestionIndex !== null && lessonQuestions[currentActiveQuestionIndex]) {
-        const q = lessonQuestions[currentActiveQuestionIndex];
-        const success = autoFillQuill(q.bestAnswer);
-        if (success) {
-          showToast(`⚡ Filled Q${q.index} via Shortcut!`, 'success');
-        }
-      } else if (lessonQuestions.length > 0) {
-        const success = autoFillQuill(lessonQuestions[0].bestAnswer);
-        if (success) {
-          showToast(`⚡ Filled Q1 via Shortcut!`, 'success');
-        }
-      }
+      const targetQ = (currentActiveIndex !== null && lessonQuestions[currentActiveIndex])
+        ? lessonQuestions[currentActiveIndex]
+        : lessonQuestions[0];
+      if (targetQ && targetQ.bestAnswer) autoFillQuill(targetQ.bestAnswer);
     }
   });
 
