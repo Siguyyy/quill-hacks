@@ -1,0 +1,9 @@
+{
+  "name": "quill-hacks",
+  "private": true,
+  "version": "2.2.0",
+  "description": "Static installer and bookmarklet artifacts for Quill Hacks",
+  "scripts": {
+    "build": "node build.js"
+  }
+}
