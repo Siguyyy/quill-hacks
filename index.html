@@ -158,15 +158,24 @@
   <div id="toast" class="toast">Copied to clipboard</div>
 
   <script>
-    fetch('dist/bookmarklet-standalone.txt')
-      .then(r => r.text())
+    fetch('./dist/bookmarklet-standalone.txt')
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.text();
+      })
       .then(code => {
         document.getElementById('drag-link').setAttribute('href', code);
         document.getElementById('raw-code').textContent = code;
+      })
+      .catch(error => {
+        const message = `Bookmarklet unavailable (${error.message}). Open the repository's dist folder to copy it manually.`;
+        document.getElementById('drag-link').removeAttribute('href');
+        document.getElementById('raw-code').textContent = message;
       });
 
     function copyCode() {
       const code = document.getElementById('raw-code').textContent;
+      if (code.startsWith('Bookmarklet unavailable')) return;
       navigator.clipboard.writeText(code).then(() => {
         const t = document.getElementById('toast');
         t.classList.add('show');
