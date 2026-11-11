@@ -441,7 +441,7 @@
 
   // Fetch Questions & Answers
   try {
-    const lessonRes = await fetch(`https://www.quill.org/api/v1/lessons/${lessonId}.json`);
+    const lessonRes = await fetch(`https://www.quill.org/api/v1/lessons/${lessonId}.json`, { credentials: 'include' });
     if (!lessonRes.ok) throw new Error(`Quill API HTTP ${lessonRes.status}`);
     const lessonData = await lessonRes.json();
     const rawQuestions = lessonData.questions || [];
@@ -459,7 +459,7 @@
         let promptText = '', cues = '', answers = [];
 
         try {
-          const qRes = await fetch(`https://www.quill.org/api/v1/questions/${key}.json`);
+          const qRes = await fetch(`https://www.quill.org/api/v1/questions/${key}.json`, { credentials: 'include' });
           if (qRes.ok) {
             const qData = await qRes.json();
             promptText = (qData.prompt || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
