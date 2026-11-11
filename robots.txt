@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://siguyyy.github.io/quill-hacks/sitemap.xml
