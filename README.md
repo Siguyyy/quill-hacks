@@ -22,39 +22,49 @@ Inspired by [ading2210/edpuzzle-answers](https://github.com/ading2210/edpuzzle-a
 
 ## Installation & Usage
 
-### Method 1: The 1-Line Bookmarklet (Recommended)
+### Method 1: Hosted Standalone Bookmarklet (Recommended)
 
-Like `edpuzzle-answers`, this one-line loader automatically runs the latest build directly from jsDelivr:
+The easiest and most reliable method is to use the live installer page:
 
-```javascript
+**[Open the Quill Hacks installer](https://siguyyy.github.io/quill-hacks/)**
+
+1. Open the installer page.
+2. Drag the **Quill Assistant** button to your browser's bookmarks bar.
+3. Or click **Copy Bookmarklet Code**, create a new bookmark, and paste the full code into the bookmark's URL field.
+4. Open an active Quill lesson.
+5. Click the **Quill Assistant** bookmark.
+
+This is the recommended method because the full bookmarklet is embedded locally in the bookmark. It does not need to download JavaScript from jsDelivr, so it works with Quill's current Content Security Policy (CSP). The assistant still makes the Quill API requests it needs after it starts.
+
+You can also copy the standalone code directly from dist/bookmarklet-standalone.txt. Copy the entire line beginning with javascript:.
+
+---
+
+### Method 2: CDN Loader (Advanced; requires disabling CSP)
+
+The CDN loader downloads the latest minified build from jsDelivr:
+
+~~~javascript
 javascript:fetch("https://cdn.jsdelivr.net/gh/Siguyyy/quill-hacks@main/dist/quill-assistant.min.js").then(r=>r.text()).then(eval);
-```
+~~~
 
-#### How to Add:
-1. In your browser (Chrome, Edge, Firefox, Arc, Brave), press `Ctrl + Shift + O` to open your Bookmark Manager (or press `Ctrl + D` to bookmark this page).
-2. Click **Add new bookmark** (or edit the existing one).
-3. Set the **Name** to: `Quill Hacks`
-4. In the **URL** field, paste the one-line code above.
-5. Save.
+On current Quill lesson pages, Quill's Content Security Policy blocks the loader's request to jsDelivr. **For the current Quill CSP, this loader will only work if you temporarily disable CSP for Quill in your browser.** If you do not disable CSP, use the standalone bookmarklet above.
 
-#### How to Use:
-1. Navigate to any active Quill lesson (e.g. `https://www.quill.org/connect/#/play/lesson/...`).
-2. Click the **Quill Hacks** bookmark from your bookmarks bar.
-3. The clean companion HUD will open with the question list and optimal answers.
-4. Click **Auto-Fill** on any card (or click **Auto-Fill Active Question** at the top).
+The [edpuzzle-answers project](https://github.com/ading2210/edpuzzle-answers) documents this same workaround. Its README links to these third-party extensions:
 
----
+- Chromium browsers (Chrome, Edge, Opera, Brave): [Disable Content-Security-Policy](https://chromewebstore.google.com/detail/disable-content-security/ieelmcmcagommplceebfedjlakkhpden)
+- Firefox: [Disable CSP for a minute](https://addons.mozilla.org/en-US/firefox/addon/disable-csp-for-a-minute/)
 
-### Method 2: Offline Standalone Bookmarklet
+Use a browser extension only if you trust it, review its permissions, enable it only while needed, and disable or remove it afterward. Disabling CSP weakens the browser's protection against untrusted scripts.
 
-If you are on a restricted school or enterprise network where GitHub or jsDelivr is blocked, use the self-contained bookmarklet:
+After CSP is temporarily disabled:
 
-1. Open [`dist/bookmarklet-standalone.txt`](dist/bookmarklet-standalone.txt).
-2. Copy the entire line starting with `javascript:...`.
-3. Create a bookmark and paste it into the URL field.
-4. Runs 100% locally in browser memory with zero external requests.
+1. Add the loader code above as a bookmark.
+2. Open an active Quill lesson.
+3. Click the loader bookmark.
+4. Re-enable or disable the CSP extension when finished.
 
----
+This loader is useful when you want the bookmark to fetch the newest main build automatically, but it is not the normal installation path for Quill.
 
 ### Method 3: Tampermonkey Userscript
 
