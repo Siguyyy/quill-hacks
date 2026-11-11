@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+      - name: Build tracked artifacts
+        run: npm run build
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
