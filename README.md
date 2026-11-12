@@ -1,6 +1,8 @@
 # Quill Hacks
 
-A lightweight, non-destructive browser utility and bookmarklet for Quill.org lessons. Unblocks clipboard restrictions (paste, copy, drag-and-drop) and retrieves optimal answers directly from Quill's CMS.\n\n**Live installer page:** [siguyyy.github.io/quill-hacks](https://siguyyy.github.io/quill-hacks/)
+A lightweight, non-destructive browser utility and bookmarklet for Quill.org Connect and Grammar activities. It unblocks clipboard restrictions (paste, copy, drag-and-drop), retrieves verified answers from Quill's APIs, and provides context-aware autofill.
+
+**Live installer page:** [siguyyy.github.io/quill-hacks](https://siguyyy.github.io/quill-hacks/)
 
 Inspired by [ading2210/edpuzzle-answers](https://github.com/ading2210/edpuzzle-answers) and [MysticalMike60t/quill-cheat](https://github.com/MysticalMike60t/quill-cheat).
 
@@ -10,7 +12,9 @@ Inspired by [ading2210/edpuzzle-answers](https://github.com/ading2210/edpuzzle-a
 
 - 🔓 **Unblocks Paste & Copy**: Neutralizes Quill's capture-phase paste restrictions cleanly at the DOM level without breaking React's input reconciliation.
 - 🎯 **Verified Optimal Answers**: Queries Quill's CMS directly, prioritizing verified `optimal: true` responses and multiple-choice options.
-- ✍️ **1-Click Auto-Fill**: Bypasses React's internal `_valueTracker` and prototype value setter, dispatching synthetic `InputEvent`, `change`, and keyboard triggers so Quill's Submit button immediately enables.
+- 🌐 **Connect & Grammar Support**: Recognizes Connect lesson URLs and Grammar activity URLs, including Grammar's `uid` route parameter.
+- ✍️ **Context-Aware Auto-Fill**: Bypasses React's internal `_valueTracker` and prototype value setter, dispatching synthetic `InputEvent`, `change`, and keyboard triggers so Quill's Submit button immediately enables.
+- 🧩 **Single- and Multi-Blank Questions**: Extracts ordered blank values from the prompt and completed answer, preserves punctuation such as `, and`, and fills each visible field separately.
 - 📋 **Resilient Copy**: Dual-layer clipboard copier combining modern `navigator.clipboard` with an automatic synchronous fallback.
 - 🔍 **Live Search & Filter**: Filter questions and prompts on the fly.
 - ⚡ **Minimalist Design**: Clean, quiet off-white interface (no AI slop, no heavy glassmorphism, no layout freezes).
@@ -31,7 +35,7 @@ The easiest and most reliable method is to use the live installer page:
 1. Open the installer page.
 2. Drag the **Quill Assistant** button to your browser's bookmarks bar.
 3. Or click **Copy Bookmarklet Code**, create a new bookmark, and paste the full code into the bookmark's URL field.
-4. Open an active Quill lesson.
+4. Open an active Quill Connect lesson or Grammar activity.
 5. Click the **Quill Assistant** bookmark.
 
 This is the recommended method because the full bookmarklet is embedded locally in the bookmark. It does not need to download JavaScript from jsDelivr, so it works with Quill's current Content Security Policy (CSP). The assistant still makes the Quill API requests it needs after it starts.
@@ -95,9 +99,12 @@ This script resets `_valueTracker`, invokes the native C++ prototype setter (`HT
 
 ### 3. Quill CMS REST Endpoints
 - `GET https://www.quill.org/api/v1/lessons/{lessonId}.json` — Retrieves lesson activity metadata and question keys.
+- `GET https://www.quill.org/api/v1/lessons/{activityId}.json?lesson_type=grammar_activity` — Retrieves Grammar activity metadata and question keys.
 - `GET https://www.quill.org/api/v1/questions/{key}.json` — Retrieves prompt text, instructions, and hints (`cues`).
 - `GET https://cms.quill.org/questions/{key}/responses` — Retrieves database responses tagged with `optimal: true`.
 - `GET https://cms.quill.org/questions/{key}/multiple_choice_options` — Fallback for multiple-choice questions.
+
+For Grammar fill-in-the-blank activities, the assistant compares the normalized prompt segments with the verified completed response. It extracts one value per blank, canonicalizes each value against Quill's listed choices when available, and fills the matching visible inputs in DOM order. If the active question cannot be matched confidently, autofill stays disabled instead of filling the wrong field.
 
 ---
 
@@ -110,7 +117,10 @@ quill-hacks/
 ├── README.md
 ├── index.html                   # Minimalist local testing & installer page
 ├── build.js                     # Dependency-free artifact builder
-├── .github/workflows/pages.yml  # GitHub Pages deployment\n├── .nojekyll                     # Keep Pages as a static site\n├── dist/
+├── .github/workflows/pages.yml  # GitHub Pages deployment
+├── .nojekyll                     # Keep Pages as a static site
+├── test-fill-answer.js           # Answer extraction and generated-bookmarklet tests
+├── dist/
 │   ├── quill-assistant.min.js   # Production minified bundle for CDN loader
 │   ├── quill-assistant.user.js  # Tampermonkey userscript
 │   ├── bookmarklet-loader.txt   # Convenient 1-line loader bookmarklet
@@ -130,9 +140,12 @@ To rebuild the tracked artifacts locally:
 
 ```bash
 npm run build
+npm test
 ```
 
-The build has no third-party dependencies. It regenerates the minified loader, standalone bookmarklet, root bookmarklet copy, and Tampermonkey userscript from `src/quill-assistant.js`.
+The build has no third-party dependencies. It regenerates the source copies, minified loader, standalone bookmarklet, root bookmarklet copy, and Tampermonkey userscripts from `src/quill-assistant.js`. The tests cover Connect and Grammar route parsing, HTML entity normalization, single-blank extraction, multi-blank extraction, option canonicalization, and generated bookmarklet syntax.
+
+After rebuilding, replace any existing bookmarklet in your browser. Bookmarks store the JavaScript code locally; they do not update automatically when the repository changes.
 
 ## Credits & Acknowledgements
 

@@ -3,6 +3,7 @@ const path = require('path');
 
 const srcPath = path.join(__dirname, 'src', 'quill-assistant.js');
 const code = fs.readFileSync(srcPath, 'utf8');
+const packageData = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
 
 // Keep the packager dependency-free so it can run in GitHub Actions or locally.
 const lines = code
@@ -29,7 +30,7 @@ fs.writeFileSync(path.join(distDir, 'bookmarklet-loader.txt'), loaderBookmarklet
 const userScriptHeader = `// ==UserScript==
 // @name         Quill Hacks
 // @namespace    https://github.com/Siguyyy/quill-hacks
-// @version      2.2.0
+// @version      ${packageData.version}
 // @description  Lightweight assistant for Quill.org lessons with verified optimal answers, 1-click React auto-fill, and clipboard unblocker.
 // @author       Siguyyy & Contributors
 // @match        https://www.quill.org/*
@@ -38,6 +39,9 @@ const userScriptHeader = `// ==UserScript==
 // @run-at       document-idle
 // ==/UserScript==`;
 
-fs.writeFileSync(path.join(distDir, 'quill-assistant.user.js'), userScriptHeader + '\n\n' + code, 'utf8');
+const userScript = userScriptHeader + '\n\n' + code;
+fs.writeFileSync(path.join(distDir, 'quill-assistant.user.js'), userScript, 'utf8');
+fs.writeFileSync(path.join(__dirname, 'quill-assistant.js'), code, 'utf8');
+fs.writeFileSync(path.join(__dirname, 'quill-assistant.user.js'), userScript, 'utf8');
 
-console.log('Built dist/quill-assistant.min.js, dist/quill-assistant.user.js, dist/bookmarklet-standalone.txt, dist/bookmarklet-loader.txt, and quill-assistant-bookmarklet.txt');
+console.log('Built source copies, userscripts, minified bundle, and bookmarklet artifacts');

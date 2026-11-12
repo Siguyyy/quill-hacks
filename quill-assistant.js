@@ -54,18 +54,18 @@
     document.onpaste = null;
   } catch (e) {}
 
-  // 2. Extract lesson ID
-  const match = window.location.href.match(/\/lesson\/([a-zA-Z0-9\-]+)/i);
-  const lessonId = match ? match[1] : null;
-  if (!lessonId) {
-    alert('Quill Assistant: Please open an active lesson (/connect/#/play/lesson/...).');
+  // 2. Identify the active Connect or Grammar route.
+  const routeInfo = getRouteInfo(window.location.href);
+  const lessonId = routeInfo ? routeInfo.lessonId : null;
+  if (!routeInfo || !lessonId) {
+    alert('Quill Assistant: Please open an active Connect lesson or Grammar activity.');
     return;
   }
 
   // 3. Isolated Input Finder (100% immune to finding HUD's own elements)
   function findQuillInput() {
     // Priority 1: User's last focused input on the page
-    if (lastFocusedInput && document.contains(lastFocusedInput) && (!lastFocusedInput.closest || !lastFocusedInput.closest('#' + HUD_ID))) {
+    if (lastFocusedInput && document.contains(lastFocusedInput) && isVisibleElement(lastFocusedInput) && (!lastFocusedInput.closest || !lastFocusedInput.closest('#' + HUD_ID))) {
       return lastFocusedInput;
     }
 
@@ -103,12 +103,143 @@
     return null;
   }
 
+  // Normalize text for comparing Quill prompts with answer responses.
+  function normalizeAnswerText(value) {
+    return String(value || '')
+      .replace(/&#x27;|&#39;|&apos;/gi, "'")
+      .replace(/&quot;/gi, '"')
+      .replace(/&amp;/gi, '&')
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // Grammar question answers identify the exact corrected phrase with braces,
+  // e.g. "Corn snakes are {friendly and} easy to hold...".
+  function extractMarkedAnswer(answerText) {
+    const text = normalizeAnswerText(answerText);
+    const markers = text.match(/\{[^{}]*\}/g) || [];
+    if (markers.length !== 1) return null;
+    return normalizeAnswerText(markers[0].slice(1, -1)) || null;
+  }
+
+  function getRouteInfo(href) {
+    const connectMatch = href.match(/\/connect\/[^#]*#\/play\/lesson\/([a-zA-Z0-9_-]+)/i);
+    if (connectMatch) return { mode: 'connect', lessonId: connectMatch[1] };
+
+    if (/\/grammar\//i.test(href) && /#\/play\//i.test(href)) {
+      const hashQuery = href.split('#')[1] || '';
+      const queryText = hashQuery.includes('?') ? hashQuery.slice(hashQuery.indexOf('?') + 1) : '';
+      const params = new URLSearchParams(queryText);
+      const grammarId = params.get('uid') || params.get('lessonId') || params.get('activityId');
+      if (grammarId) return { mode: 'grammar', lessonId: grammarId };
+    }
+
+    return null;
+  }
+
+  // Classify conservatively. The visible DOM remains the source of truth when filling.
+  function classifyQuestion(questionType, promptText) {
+    const type = normalizeAnswerText(questionType).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    if (/multiple|choice|radio/.test(type)) return 'multiple-choice';
+    if (/select|dropdown/.test(type)) return 'select';
+    if (/fill.*blank|cloze|blank/.test(type) || /_{2,}/.test(promptText)) return 'fill-blank';
+    return 'full-response';
+  }
+
+  // Extract the ordered text represented by each blank from a completed answer.
+  // The prompt segments are matched in order so repeated words remain unambiguous.
+  function extractBlankAnswers(promptText, fullAnswer) {
+    const prompt = normalizeAnswerText(promptText);
+    const answer = normalizeAnswerText(fullAnswer);
+    const markers = prompt.match(/_{2,}/g) || [];
+    if (!answer || markers.length === 0) return [];
+
+    const segments = prompt.split(/_{2,}/);
+    const answerLower = answer.toLowerCase();
+    const values = [];
+    let cursor = 0;
+
+    for (let i = 0; i < markers.length; i++) {
+      const before = segments[i].trim();
+      const after = segments[i + 1].trim();
+      const beforeIndex = before ? answerLower.indexOf(before.toLowerCase(), cursor) : cursor;
+      if (beforeIndex < 0) return [];
+
+      const valueStart = before ? beforeIndex + before.length : cursor;
+      const afterIndex = after ? answerLower.indexOf(after.toLowerCase(), valueStart) : answer.length;
+      if (after && afterIndex < 0) return [];
+
+      const value = answer.slice(valueStart, afterIndex).trim();
+      if (!value) return [];
+      values.push(value);
+      cursor = afterIndex;
+    }
+
+    return values;
+  }
+
+  function canonicalizeBlankAnswers(values, cues) {
+    const options = Array.isArray(cues)
+      ? cues.map(option => normalizeAnswerText(option)).filter(Boolean)
+      : [];
+    return values.map(value => {
+      const normalized = normalizeAnswerText(value).toLowerCase();
+      return options.find(option => option.toLowerCase() === normalized) || normalizeAnswerText(value);
+    });
+  }
+
+  // Preserve the single-blank API used by the existing tests and UI logic.
+  function extractBlankAnswer(promptText, fullAnswer) {
+    const values = extractBlankAnswers(promptText, fullAnswer);
+    if (values.length !== 1) return null;
+    const candidate = values[0].replace(/^[,;:\s]+|[,;:\s]+$/g, '').trim();
+    return candidate && candidate.length < normalizeAnswerText(fullAnswer).length * 0.8 ? candidate : null;
+  }
+
+  function isVisibleElement(el) {
+    if (!el || !el.isConnected) return false;
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+  }
+
+  function isInViewport(el) {
+    if (!isVisibleElement(el)) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
+  }
+
+  function questionMatchScore(promptText, visibleText) {
+    const prompt = normalizeAnswerText(promptText).toLowerCase().replace(/[^a-z0-9']+/g, ' ').trim();
+    const visible = normalizeAnswerText(visibleText).toLowerCase().replace(/[^a-z0-9']+/g, ' ').trim();
+    if (!prompt || !visible) return 0;
+    if (visible.includes(prompt)) return 1;
+
+    const words = prompt.split(' ').filter(word => word.length > 2 && !['the', 'and', 'for'].includes(word));
+    if (words.length < 3) return 0;
+    const matches = words.filter(word => visible.includes(word)).length;
+    return matches / words.length;
+  }
+
+  function elementTextContexts(el) {
+    const contexts = [];
+    let node = el;
+    for (let depth = 0; node && depth < 7; depth++, node = node.parentElement) {
+      if (!isVisibleElement(node)) continue;
+      const text = (node.innerText || node.textContent || '').trim();
+      if (text.length > 10 && text.length < 4000) contexts.push(text);
+    }
+    return contexts;
+  }
+
   // 4. React Fiber Auto-Fill
-  function autoFillQuill(text) {
+  function autoFillQuill(text, targetOverride = null) {
     if (!text || text === 'No answer found in database') return false;
 
     // A. Multiple choice option check (outside HUD)
-    const options = Array.from(document.querySelectorAll('label, .ant-radio-wrapper, .multiple-choice-option, [role="radio"], button.option'))
+    const options = targetOverride ? [] : Array.from(document.querySelectorAll('label, .ant-radio-wrapper, .multiple-choice-option, [role="radio"], button.option'))
       .filter(el => !el.closest('#' + HUD_ID));
 
     for (const opt of options) {
@@ -122,7 +253,7 @@
     }
 
     // B. Locate Quill's actual input field
-    const target = findQuillInput();
+    const target = targetOverride || findQuillInput();
     if (!target) {
       alert('Quill Assistant: Could not locate answer field. Please click inside the answer box first, then click Auto-Fill.');
       return false;
@@ -195,6 +326,33 @@
     return true;
   }
 
+  function findQuillInputsForQuestion(question) {
+    const selector = 'textarea, input[type="text"], input:not([type]), [contenteditable="true"]';
+    const candidates = Array.from(document.querySelectorAll(selector))
+      .filter(input => !input.closest('#' + HUD_ID) && isVisibleElement(input));
+    const scored = candidates.map(input => {
+      const score = Math.max(0, ...elementTextContexts(input).map(text => questionMatchScore(question.promptText, text)));
+      return { input, score };
+    });
+    const bestScore = Math.max(0, ...scored.map(item => item.score));
+    if (bestScore < 1) return [];
+    return scored.filter(item => item.score === bestScore).map(item => item.input);
+  }
+
+  function autoFillQuestion(question) {
+    const values = Array.isArray(question && question.fillAnswers) ? question.fillAnswers : [];
+    if (values.length === 0) return false;
+    if (values.length === 1) return autoFillQuill(values[0]);
+
+    const targets = findQuillInputsForQuestion(question);
+    if (targets.length < values.length) {
+      alert(`Quill Assistant: Found ${targets.length} answer fields but this question needs ${values.length}. Click inside the question and try again.`);
+      return false;
+    }
+
+    return values.every((value, index) => autoFillQuill(value, targets[index]));
+  }
+
   // 5. Dual-layer copy
   async function copyToClipboard(text) {
     if (!text || text === 'No answer found in database') return false;
@@ -259,6 +417,10 @@
         font-weight: 500;
         cursor: pointer;
         user-select: none;
+      }
+      .qa-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
       .qa-btn:hover { background: #f0f0eb; border-color: #c0c0ba; }
       .qa-btn-dark {
@@ -385,14 +547,15 @@
   // Event Delegation for Buttons
   let lessonQuestions = [];
   let currentActiveIndex = null;
+  let refreshActiveQuestion = () => null;
 
   hud.addEventListener('click', async (e) => {
     const fillBtn = e.target.closest('.qa-card-fill');
     if (fillBtn) {
       const idx = parseInt(fillBtn.dataset.index, 10);
       const q = lessonQuestions[idx];
-      if (q && q.bestAnswer) {
-        const ok = autoFillQuill(q.bestAnswer);
+      if (q && q.fillAnswers && q.fillAnswers.length) {
+        const ok = autoFillQuestion(q);
         if (ok) {
           fillBtn.textContent = 'Filled ✓';
           setTimeout(() => { fillBtn.textContent = 'Auto-Fill'; }, 1200);
@@ -416,11 +579,15 @@
     }
 
     if (e.target.closest('#qa-fill-current')) {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      refreshActiveQuestion();
       const targetQ = (currentActiveIndex !== null && lessonQuestions[currentActiveIndex])
         ? lessonQuestions[currentActiveIndex]
-        : lessonQuestions[0];
-      if (targetQ && targetQ.bestAnswer) {
-        autoFillQuill(targetQ.bestAnswer);
+        : null;
+      if (targetQ && targetQ.fillAnswers && targetQ.fillAnswers.length) {
+        autoFillQuestion(targetQ);
+      } else if (!targetQ) {
+        alert('Quill Assistant: Click inside the current question or scroll it into view, then try Auto-Fill Active Question again.');
       }
     }
   });
@@ -441,7 +608,11 @@
 
   // Fetch Questions & Answers
   try {
-    const lessonRes = await fetch(`https://www.quill.org/api/v1/lessons/${lessonId}.json`);
+    // Grammar activities use the same lessons resource, with a grammar_activity type.
+    const lessonUrl = routeInfo.mode === 'grammar'
+      ? `https://www.quill.org/api/v1/lessons/${encodeURIComponent(lessonId)}.json?lesson_type=grammar_activity`
+      : `https://www.quill.org/api/v1/lessons/${encodeURIComponent(lessonId)}.json`;
+    const lessonRes = await fetch(lessonUrl, { credentials: 'include' });
     if (!lessonRes.ok) throw new Error(`Quill API HTTP ${lessonRes.status}`);
     const lessonData = await lessonRes.json();
     const rawQuestions = lessonData.questions || [];
@@ -456,14 +627,22 @@
     lessonQuestions = await Promise.all(
       rawQuestions.map(async (item, idx) => {
         const key = item.key;
-        let promptText = '', cues = '', answers = [];
+        let promptText = '', cues = '', questionType = '', answers = [], apiAnswers = [], markedAnswer = null;
 
         try {
-          const qRes = await fetch(`https://www.quill.org/api/v1/questions/${key}.json`);
+          const qRes = await fetch(`https://www.quill.org/api/v1/questions/${key}.json`, { credentials: 'include' });
           if (qRes.ok) {
             const qData = await qRes.json();
-            promptText = (qData.prompt || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+            promptText = normalizeAnswerText((qData.prompt || '').replace(/<[^>]+>/g, ' '));
             cues = qData.cues || '';
+            questionType = qData.question_type || qData.questionType || qData.type || '';
+            if (Array.isArray(qData.answers)) {
+              apiAnswers = qData.answers.map(answer => {
+                const rawText = normalizeAnswerText(answer.text);
+                if (!markedAnswer) markedAnswer = extractMarkedAnswer(rawText);
+                return { text: rawText.replace(/\{([^{}]*)\}/g, '$1'), optimal: true };
+              }).filter(answer => answer.text);
+            }
           }
         } catch (e) {}
 
@@ -490,13 +669,28 @@
           } catch (e) {}
         }
 
+        if (answers.length === 0 && apiAnswers.length > 0) answers = apiAnswers;
+
         const validAnswers = answers.map(a => a.text).filter(Boolean);
+        const bestAnswer = validAnswers[0] || 'No answer found in database';
+        const questionMode = classifyQuestion(questionType, promptText);
+        const extractedAnswers = questionMode === 'fill-blank'
+          ? (markedAnswer ? [markedAnswer] : extractBlankAnswers(promptText, bestAnswer))
+          : [bestAnswer];
+        const fillAnswers = questionMode === 'fill-blank'
+          ? canonicalizeBlankAnswers(extractedAnswers, cues)
+          : extractedAnswers;
+        const fillAnswer = fillAnswers.join(' | ');
         return {
           index: idx + 1,
           key,
           promptText,
           cues,
-          bestAnswer: validAnswers[0] || 'No answer found in database',
+          questionType,
+          questionMode,
+          bestAnswer,
+          fillAnswers,
+          fillAnswer,
           isOptimal: answers.some(a => a.optimal)
         };
       })
@@ -515,9 +709,10 @@
           <div style="font-size: 12px; color: #444440;">${q.promptText || `Question ${q.index}`}</div>
           ${q.cues ? `<div style="font-size: 11px; color: #d35400;">Hint: <em>${q.cues}</em></div>` : ''}
           <div class="qa-answer">${q.bestAnswer}</div>
+          ${q.questionMode === 'fill-blank' ? `<div style="font-size: 11px; color: #666660;">Auto-fill value${q.fillAnswers.length > 1 ? 's' : ''}: <strong>${q.fillAnswer || 'Could not safely detect the blank'}</strong></div>` : ''}
           <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px;">
             <button class="qa-btn qa-card-copy" data-index="${idx}">Copy</button>
-            <button class="qa-btn qa-btn-dark qa-card-fill" data-index="${idx}">Auto-Fill</button>
+            <button class="qa-btn qa-btn-dark qa-card-fill" data-index="${idx}" ${q.fillAnswers.length ? '' : 'disabled'}>${q.fillAnswers.length ? 'Auto-Fill' : 'Auto-Fill unavailable'}</button>
           </div>
         </div>
       `;
@@ -525,19 +720,56 @@
 
     document.getElementById('qa-scroll').innerHTML = html;
 
-    // Guarded interval check for active question (scans Quill container, NOT document.body)
-    function checkActiveQuestion() {
-      const container = document.querySelector('.play-lesson, #play-lesson-app, .connect-container, main') || document.body;
-      const text = container.innerText || '';
-      let foundIdx = null;
+    // Detect the active question using visible input context and visible prompt text.
+    // Never silently fall back to Q1 when the current question is uncertain.
+    function detectActiveQuestion() {
+      const sources = [];
+      const inputSelector = 'textarea, input[type="text"], input:not([type]), [contenteditable="true"]';
+      const focused = document.activeElement;
+      const inputs = [];
 
-      for (let i = 0; i < lessonQuestions.length; i++) {
-        const q = lessonQuestions[i];
-        if (q.promptText && q.promptText.length > 12 && text.includes(q.promptText.slice(0, 24))) {
-          foundIdx = i;
-          break;
-        }
+      if (lastFocusedInput && isVisibleElement(lastFocusedInput) && !lastFocusedInput.closest('#' + HUD_ID)) {
+        inputs.push(lastFocusedInput);
       }
+      if (focused && isVisibleElement(focused) && !focused.closest('#' + HUD_ID) && focused.matches(inputSelector)) {
+        inputs.push(focused);
+      }
+      document.querySelectorAll(inputSelector).forEach(input => {
+        if (inputs.length < 8 && isVisibleElement(input) && !input.closest('#' + HUD_ID)) inputs.push(input);
+      });
+
+      inputs.forEach(input => {
+        elementTextContexts(input).forEach(text => sources.push({ text, priority: 3 }));
+      });
+
+      document.querySelectorAll('p, div, span, label, li, h1, h2, h3').forEach(element => {
+        if (sources.length >= 120 || element.closest('#' + HUD_ID) || !isInViewport(element)) return;
+        const text = (element.innerText || element.textContent || '').trim();
+        if (text.length > 10 && text.length < 800) sources.push({ text, priority: 2 });
+      });
+
+      const container = document.querySelector('.play-lesson, #play-lesson-app, .connect-container, main');
+      if (container && isVisibleElement(container)) {
+        sources.push({ text: container.innerText || '', priority: 0.4 });
+      }
+
+      let foundIdx = null;
+      let bestScore = 0;
+      lessonQuestions.forEach((q, idx) => {
+        sources.forEach(source => {
+          const score = questionMatchScore(q.promptText, source.text) * source.priority;
+          if (score > bestScore) {
+            bestScore = score;
+            foundIdx = idx;
+          }
+        });
+      });
+
+      return bestScore >= 1 ? foundIdx : null;
+    }
+
+    refreshActiveQuestion = function () {
+      const foundIdx = detectActiveQuestion();
 
       if (foundIdx === currentActiveIndex) return;
 
@@ -552,16 +784,18 @@
         const newCard = document.getElementById(`qa-card-${foundIdx}`);
         if (newCard) newCard.classList.add('active-q');
         const fillBtn = document.getElementById('qa-fill-current');
-        if (fillBtn) fillBtn.textContent = `Auto-Fill Q${lessonQuestions[foundIdx].index}`;
+        if (fillBtn) fillBtn.textContent = lessonQuestions[foundIdx].fillAnswers.length
+          ? `Auto-Fill Q${lessonQuestions[foundIdx].index}`
+          : 'Auto-Fill unavailable';
       } else {
         const fillBtn = document.getElementById('qa-fill-current');
-        if (fillBtn) fillBtn.textContent = 'Auto-Fill Active Question';
+        if (fillBtn) fillBtn.textContent = 'Select active question';
       }
-    }
+    };
 
-    checkActiveQuestion();
+    refreshActiveQuestion();
     if (window._qaDetectInterval) clearInterval(window._qaDetectInterval);
-    window._qaDetectInterval = setInterval(checkActiveQuestion, 800);
+    window._qaDetectInterval = setInterval(refreshActiveQuestion, 800);
 
   } catch (err) {
     document.getElementById('qa-scroll').innerHTML = `<div style="color: #c0392b; padding: 12px;">Failed to load: ${err.message}</div>`;
@@ -575,10 +809,11 @@
     }
     if (e.altKey && (e.key === 'f' || e.key === 'F')) {
       e.preventDefault();
+      refreshActiveQuestion();
       const targetQ = (currentActiveIndex !== null && lessonQuestions[currentActiveIndex])
         ? lessonQuestions[currentActiveIndex]
-        : lessonQuestions[0];
-      if (targetQ && targetQ.bestAnswer) autoFillQuill(targetQ.bestAnswer);
+        : null;
+      if (targetQ && targetQ.fillAnswers && targetQ.fillAnswers.length) autoFillQuestion(targetQ);
     }
   });
 

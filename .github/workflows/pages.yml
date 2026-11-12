@@ -25,6 +25,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Build tracked artifacts
         run: npm run build
+      - name: Run tests
+        run: npm test
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
