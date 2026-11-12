@@ -1,4 +1,4 @@
-# Quill Hacks
+# Quill Hacks — Quill.org Browser Assistant
 
 A lightweight, non-destructive browser utility and bookmarklet for Quill.org Connect and Grammar activities. It unblocks clipboard restrictions (paste, copy, drag-and-drop), retrieves verified answers from Quill's APIs, and provides context-aware autofill.
 
